@@ -19,7 +19,7 @@ impl LinkedStack {
     }
 
     fn push(&mut self, val: i32) {
-        match self.head.take() {
+        match &self.head {
             None => {
                 self.head = {
                     Some(Box::new(Node {
@@ -28,13 +28,12 @@ impl LinkedStack {
                     }))
                 };
             }
-            Some(node) => {
-                self.head = {
-                    Some(Box::new(Node {
-                        val,
-                        prev: Some(Box::new(*node))
-                    }))
-                };
+            Some(_) => {
+                let next_head = Some(Box::new(Node {
+                    val,
+                    prev: self.head.take()
+                }));
+                self.head = next_head;
             }
         }
     }
@@ -47,6 +46,14 @@ impl LinkedStack {
                 self.head = node.prev.take();
                 val
             }
+        }
+    }
+}
+
+impl Drop for LinkedStack {
+    fn drop(&mut self) {
+        while self.head.is_some() {
+            self.pop();
         }
     }
 }
@@ -82,17 +89,15 @@ mod tests {
 
     #[test]
     fn test_big_stack() {
-        for j in 0..1 {
-            let mut stack = LinkedStack::new();
-            for i in 0..1_000_000 {
-                stack.push(i);
-            }
+        let mut stack = LinkedStack::new();
+        for i in 0..1_000_000 {
+            stack.push(i);
+        }
 
-            //for i in (0..1_000_000).rev() {
-            //    assert_eq!(stack.pop(), Some(i));
-            //}
+        for i in (0..1_000_000).rev() {
+            assert_eq!(stack.pop(), Some(i));
+        }
 
-            //assert_eq!(stack.pop(), None);
-            }
+        assert_eq!(stack.pop(), None);
    }
 }
