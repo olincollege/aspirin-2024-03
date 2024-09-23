@@ -1,8 +1,13 @@
-struct Node {}
+struct Node {
+    val: i32,
+    next: Link,
+}
 
 type Link = Option<Box<Node>>;
 
-pub struct LinkedStack {}
+pub struct LinkedStack {
+    head: Link,
+}
 
 impl LinkedStack {
     fn new() -> Self {
