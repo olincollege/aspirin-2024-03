@@ -16,7 +16,7 @@ fn longest_common_substring<(first_str: &str, second_str: &str) -> &str {
     todo!()
 }
 
-fn longest_common_substring_multiple(strings: &&str]) -> &str {
+fn longest_common_substring_multiple(strings: &[&str]) -> &str {
     todo!()
 }
 
