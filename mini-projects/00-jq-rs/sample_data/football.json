@@ -1,0 +1,32 @@
+[
+    {
+        "name": "Leo Lightning",
+        "position": "Forward",
+        "team": "Thunder FC",
+        "goals": 32,
+        "favorite_move": {
+            "name": "Rocket Shot",
+            "success_rate": 85
+        }
+    },
+    {
+        "name": "Maximus Defender",
+        "position": "Defender",
+        "team": "Iron Wall United",
+        "goals": 76,
+        "favorite_move": {
+            "name": "Slide Tackle",
+            "success_rate": 88
+        }
+    },
+    {
+        "name": "Sophie Swift",
+        "position": "Midfielder",
+        "team": "Falcon FC",
+        "goals": 24,
+        "favorite_move": {
+            "name": "Eagle Pass",
+            "success_rate": 95
+        }
+    }
+]

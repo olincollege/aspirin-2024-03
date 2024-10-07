@@ -1,0 +1,14 @@
+{
+    "metadata": [
+        {
+            "Name": "Steve",
+            "GPA": "4.0",
+            "Age": 23
+        },
+        {
+            "Name": "Bob",
+            "GPA": "2.1",
+            "Age": 20
+        }
+    ]
+}
