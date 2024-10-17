@@ -1,0 +1,22 @@
+[package]
+name = "advanced-traits"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[[bin]]
+name = "associated-types"
+path = "src/associated-types.rs"
+
+[[bin]]
+name = "qualified-syntax"
+path = "src/qualified-syntax.rs"
+
+[[bin]]
+name = "newtype"
+path = "src/newtype.rs"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
