@@ -1,0 +1,14 @@
+[package]
+name = "polymorphism"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[[bin]]
+name = "generics"
+path = "src/generics.rs"
+
+[[bin]]
+name = "traits"
+path = "src/traits.rs"
