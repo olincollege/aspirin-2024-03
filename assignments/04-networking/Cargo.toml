@@ -1,0 +1,22 @@
+[package]
+name = "aspirin-eats"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "origin"
+path = "src/bin/origin.rs"
+
+[[bin]]
+name = "proxy"
+path = "src/bin/reverse_proxy.rs"
+
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+display_json = "0.2.1"
+uuid = { version = "1.10.0", features = ["v4"] }
+serde_json = "1.0.128"
+rusqlite = "0.32.1"
+serde_rusqlite = "0.36.0"
+thiserror = "1.0.64"
