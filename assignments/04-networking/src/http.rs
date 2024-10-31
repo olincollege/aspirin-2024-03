@@ -16,7 +16,7 @@ pub struct HttpRequest {
 }
 
 impl FromStr for HttpRequest {
-    type Err = String;
+    type Err = AspirinEatsError;
 
     // Parse a string into an HTTP Request
     fn from_str(s: &str) -> Result<Self, Self::Err> {
