@@ -1,0 +1,14 @@
+[package]
+name = "networking"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[[bin]]
+name = "udp_server"
+path = "src/udp_server.rs"
+
+[[bin]]
+name = "udp_client"
+path = "src/udp_client.rs"
