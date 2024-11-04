@@ -121,6 +121,26 @@ impl<T> MyVec<T> {
     }
 }
 
+impl<T> Drop for MyVec<T> {
+    fn drop(&mut self) {
+        if self.size == 0 {
+            return;
+        }
+
+        unsafe {
+            for index in 0..self.size {
+                std::ptr::drop_in_place(self.pointer_to_elem(index))
+            }
+        }
+
+        let layout = Layout::array::<T>(self.capacity).expect("layout has already been allocated");
+
+        unsafe {
+            dealloc(self.ptr as _, layout);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
