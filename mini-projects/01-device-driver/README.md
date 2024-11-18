@@ -46,7 +46,7 @@ The following outlines the state machine running on the raspberry pico (the vari
     - "set all LEDs": This turns on all three LEDs.
     - "clear all LEDs": This turns off all three LEDs.
 
-    From this state, the device can be transitioned to `DeviceState::Running` by sending "stop controller" via serial.
+    From this state, the device can be transitioned to `DeviceState::Running` by sending "start controller" via serial.
 
 3. `DeviceState::Running` signifies that a game is actually being played. This means that the commander needs to know the current state of each button so that it can update the position of each player. That means that within this state, the controller sends the state of each button (as a bitmask) over serial. The value sent over is mapped as following (most significant bit to least significant bit):
     - Bit 3: The state of the Northwest button.
@@ -129,6 +129,8 @@ Tasks to improve the Laptop Interface:
 - (1-4 Story Points) This bullet is fully up to you! Wouldn't it be really cool of the game we are playing is more than just tracking the position of the controller? This task gives u creative liberty to add any game logic that you want. Make sure to reach out to the teaching team to agree on the number of story points (scope) of your game.
 - (3 Story Points) Some of our users aren't the biggest fans of our terminal-based interface. One improvement that could be made is adding an actual GUI to run our game. I highly recommend using one of rust's crates that make generating GUIs very easy! One example is [egui](https://docs.rs/egui/latest/egui/). 
 - (3 Story Points) Game Metrics! Currently, our base game only displays who won the game, but doesn't provide any information about a player's performance! I believe adding visualizations of the player's position over time could be really helpful! Rust's [plotters](https://docs.rs/plotters/latest/plotters/) library could be helpful for you to render this plot! I would also like you to add another plot of your choose to display something that you believe is critical for players to understand how well they did in your game!
+
+In order for users (the teaching team) to know what features your software stack supports, please list out all of the store points you attempted in `guide.md`. 
 
 ## 3. Submission
 To submit this assignment, add and commit your changed files (don't forget to format and lint!). These should just be the files in the src directory. Be sure to write a reasonably clear commit message.
