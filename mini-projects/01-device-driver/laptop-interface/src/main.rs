@@ -94,25 +94,7 @@ fn send_commands(port: *mut c_void) -> Result<(), String> {
     Ok(())
 }
 
-fn parse_button_states(data: &str) -> Option<ButtonStates> {
-    if !data.starts_with("buttons:") {
-        return None;
-    }
-
-    let states = data.trim_start_matches("buttons:").trim();
-    if let Ok(bitmask) = u8::from_str_radix(states, 2) {
-        Some(ButtonStates {
-            northwest: (bitmask & 0b1000) != 0,
-            southwest: (bitmask & 0b0100) != 0,
-            southeast: (bitmask & 0b0010) != 0,
-            northeast: (bitmask & 0b0001) != 0,
-        })
-    } else {
-        None
-    }
-}
-
-fn write_command(port_name: &str, sender: Sender<(String, String)>) {
+fn write_command(port_name: &str, sender: Sender<(String, String)>, player: usize) {
     let port_name_c = CString::new(port_name).expect("CString::new failed");
     let mut port: *mut c_void = ptr::null_mut();
 
@@ -138,81 +120,64 @@ fn write_command(port_name: &str, sender: Sender<(String, String)>) {
         // Read button states
         let mut previous_states = ButtonStates::default();
         let mut buf = [0u8; 1];
+        let mut position = [0, 0];
         loop {
             let bytes_read = sp_blocking_read(port, buf.as_mut_ptr(), buf.len(), 1000);
             if bytes_read > 0 {
                 // Format byte as binary string with "buttons:" prefix
-                let button_data = format!("buttons:{:04b}", buf[0]);
-                println!("Received: {}", button_data);
                 let current_states = ButtonStates {
                     northwest: (buf[0] & 0b1000) != 0,
                     southwest: (buf[0] & 0b0100) != 0,
                     southeast: (buf[0] & 0b0010) != 0,
                     northeast: (buf[0] & 0b0001) != 0,
                 };
-                // Check for state changes
-                if let Some(current_states) = parse_button_states(&button_data) {
-                    // Check for state changes
-                    if current_states != previous_states {
-                        // Send messages for changed buttons
-                        if current_states.northwest != previous_states.northwest {
-                            sender
-                                .send((
-                                    port_name.to_string(),
-                                    format!(
-                                        "Northwest button {}",
-                                        if current_states.northwest {
-                                            "pressed"
-                                        } else {
-                                            "released"
-                                        }
-                                    ),
-                                ))
-                                .unwrap();
-                        }
-                    }
-                    if current_states.southwest != previous_states.southwest {
+                if current_states != previous_states {
+                    // Send messages for changed buttons
+                    if current_states.northwest != previous_states.northwest
+                        && !current_states.northwest
+                    {
+                        position[0] -= 1;
+                        position[1] += 1;
                         sender
                             .send((
-                                port_name.to_string(),
-                                format!(
-                                    "Southwest button {}",
-                                    if current_states.southwest {
-                                        "pressed"
-                                    } else {
-                                        "released"
-                                    }
-                                ),
+                                player.to_string(),
+                                format!("({}, {})", position[0], position[1]),
                             ))
                             .unwrap();
                     }
-                    if current_states.southeast != previous_states.southeast {
+                    if current_states.southwest != previous_states.southwest
+                        && !current_states.southwest
+                    {
+                        position[0] -= 1;
+                        position[1] -= 1;
                         sender
                             .send((
-                                port_name.to_string(),
-                                format!(
-                                    "Southeast button {}",
-                                    if current_states.southeast {
-                                        "pressed"
-                                    } else {
-                                        "released"
-                                    }
-                                ),
+                                player.to_string(),
+                                format!("({}, {})", position[0], position[1]),
                             ))
                             .unwrap();
                     }
-                    if current_states.northeast != previous_states.northeast {
+                    if current_states.southeast != previous_states.southeast
+                        && !current_states.southeast
+                    {
+                        position[0] += 1;
+                        position[1] -= 1;
                         sender
                             .send((
-                                port_name.to_string(),
-                                format!(
-                                    "Northeast button {}",
-                                    if current_states.northeast {
-                                        "pressed"
-                                    } else {
-                                        "released"
-                                    }
-                                ),
+                                player.to_string(),
+                                format!("({}, {})", position[0], position[1]),
+                            ))
+                            .unwrap();
+                    }
+                    if current_states.northeast != previous_states.northeast
+                        && !current_states.northeast
+                    {
+                        position[0] += 1;
+                        position[1] += 1;
+                        sender
+                            .send((
+                                player.to_string(),
+                                format!("({}, {})", position[0], position[1]),
                             ))
                             .unwrap();
                     }
@@ -232,25 +197,30 @@ fn write_command(port_name: &str, sender: Sender<(String, String)>) {
 fn display_positions(receiver: Receiver<(String, String)>) {
     loop {
         if let Ok((port_name, position)) = receiver.recv() {
-            println!("Controller {}: Position {}", port_name, position);
+            println!("Player {} Position: {}", port_name, position);
         }
     }
 }
 
+const CONTROLLER_PORTS: [&str; 1] = ["/dev/ttyACM0"];
+
 fn main() {
     let (sender, receiver) = unbounded();
-
-    let controller_ports = vec!["/dev/ttyACM0"];
-    for port in controller_ports {
+    let mut threads = Vec::new();
+    for (index, port) in CONTROLLER_PORTS.iter().enumerate() {
         let sender_clone = sender.clone();
-        thread::spawn(move || {
-            write_command(port, sender_clone);
-        });
+        threads.push(thread::spawn(move || {
+            write_command(port, sender_clone, index);
+        }));
     }
 
     let display_thread = thread::spawn(move || {
         display_positions(receiver);
     });
+    threads.push(display_thread);
 
-    display_thread.join().unwrap();
+    // Join all threads
+    for thread in threads {
+        thread.join().unwrap();
+    }
 }

@@ -227,7 +227,7 @@ fn main() -> ! {
                 }
             }
         }
-        
+
         // Actions based on the current state
         match device_state {
             DeviceState::PendingInit => {}
@@ -245,7 +245,6 @@ fn main() -> ! {
             DeviceState::Running => {
                 if current_time - last_button_state_transmission_time > SERIAL_TX_PERIOD {
                     last_button_state_transmission_time = current_time;
-                    let mut button_text: String<20> = String::new();
                     let button_data = (ne_button
                         .is_high()
                         .expect("GPIOs should never fail to read state")
@@ -265,12 +264,9 @@ fn main() -> ! {
                             .expect("GPIOs should never fail to read state")
                             as u8)
                             << 3);
-                    writeln!(button_text, "{button_data}")
-                        .expect("GPIOs should never fail to read state");
-
                     // Only possible error is when USB Buffer is full, which just means
                     // that this specific message will be dropped.
-                    let _ = serial.write(button_text.as_bytes());
+                    let _ = serial.write(&[button_data]);
                     let _ = serial.flush();
                 }
             }
