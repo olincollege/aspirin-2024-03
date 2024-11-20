@@ -9,7 +9,7 @@ use model::model;
 use std::thread;
 use view::view;
 
-const CONTROLLER_PORTS: [&str; 3] = ["/dev/ttyACM0", "/dev/ttyACM0", "/dev/ttyACM0"];
+const CONTROLLER_PORTS: [&str; 1] = ["/dev/ttyACM0"];
 
 fn main() {
     let (model_sender, model_receiver) = unbounded();

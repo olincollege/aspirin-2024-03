@@ -90,45 +90,62 @@ pub fn controller(
         .send((player.to_string(), "".to_string()))
         .unwrap();
 
-    // Wait for game to start
     loop {
-        if let Ok((message, _)) = receiver.recv() {
-            if let Err(e) = send_command(port, Command::from_string(&message).unwrap()) {
-                eprintln!("Failed to send command: {}", e);
-            };
-            if message == "Start" {
+        // Wait for game to start
+        if let Ok((_, message)) = receiver.recv() {
+            if message == "Escape" {
                 break;
             }
         }
-    }
 
-    // Read button states
-    let mut previous_states = ButtonStates::default();
-    loop {
-        let current_states = match read_button_states(port) {
-            Ok(states) => states,
-            Err(e) => {
-                eprintln!("{}", e);
-                break;
+        // Start LED command sequence
+        loop {
+            if let Ok((_, message)) = receiver.recv() {
+                if let Err(e) = send_command(port, Command::from_string(&message).unwrap()) {
+                    eprintln!("Failed to send command: {}", e);
+                };
+                if message == "Start" {
+                    break;
+                }
             }
-        };
-        let buttons = [
-            ("nw", current_states.northwest, previous_states.northwest),
-            ("sw", current_states.southwest, previous_states.southwest),
-            ("se", current_states.southeast, previous_states.southeast),
-            ("ne", current_states.northeast, previous_states.northeast),
-        ];
-        let message = buttons
-            .iter()
-            .filter(|(_, current, previous)| current != previous && !current)
-            .map(|(name, _, _)| name)
-            .fold(String::new(), |acc, name| format!("{}{},", acc, name));
+        }
 
-        // Update previous states
-        previous_states = current_states;
+        // Read button states
+        let mut previous_states = ButtonStates::default();
+        loop {
+            match receiver.try_recv() {
+                Ok((_, message)) => {
+                    if message == "Game over" {
+                        break;
+                    }
+                }
+                Err(_) => {}
+            }
+            let current_states = match read_button_states(port) {
+                Ok(states) => states,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    break;
+                }
+            };
+            let buttons = [
+                ("nw", current_states.northwest, previous_states.northwest),
+                ("sw", current_states.southwest, previous_states.southwest),
+                ("se", current_states.southeast, previous_states.southeast),
+                ("ne", current_states.northeast, previous_states.northeast),
+            ];
+            let message = buttons
+                .iter()
+                .filter(|(_, current, previous)| current != previous && !current)
+                .map(|(name, _, _)| name)
+                .fold(String::new(), |acc, name| format!("{}{},", acc, name));
 
-        if message.len() > 0 {
-            model_sender.send((player.to_string(), message)).unwrap();
+            // Update previous states
+            previous_states = current_states;
+
+            if message.len() > 0 {
+                model_sender.send((player.to_string(), message)).unwrap();
+            }
         }
     }
 
