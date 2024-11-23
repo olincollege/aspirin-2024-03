@@ -14,12 +14,13 @@ use panic_halt as _;
 // register access
 use rp_pico::hal::pac;
 
-// A shorter alias for the Hardware Abstraction Layer, which provides
+// A shorter alias for the Hardware A bstraction Layer, which provides
 // higher-level drivers.
 use embedded_hal::digital::{InputPin, OutputPin, PinState};
 use rp_pico::hal;
 use rp_pico::hal::Sio;
 use rp_pico::Pins;
+use embedded_hal_0_2::adc::OneShot;
 
 // USB Device support
 use usb_device::{class_prelude::*, prelude::*};
@@ -68,11 +69,15 @@ fn main() -> ! {
     let mut green_led = pins.gpio16.into_push_pull_output();
 
     // Buttons
-    let mut ne_button = pins.gpio13.into_pull_down_input();
-    let mut se_button = pins.gpio15.into_pull_down_input();
-    let mut sw_button = pins.gpio14.into_pull_down_input();
-    let mut nw_button = pins.gpio12.into_pull_down_input();
-
+    let mut north_button = pins.gpio13.into_pull_down_input();
+    let mut northwest_button = pins.gpio12.into_pull_down_input();
+    let mut west_button = pins.gpio15.into_pull_down_input();
+    let mut southwest_button = pins.gpio22.into_pull_down_input();
+    let mut south_button = pins.gpio21.into_pull_down_input();
+    let mut southeast_button = pins.gpio20.into_pull_down_input();
+    let mut east_button = pins.gpio19.into_pull_down_input();
+    let mut northeast_button = pins.gpio14.into_pull_down_input();
+    
     // Set up the watchdog driver - needed by the clock setup code
     let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
 
@@ -125,6 +130,11 @@ fn main() -> ! {
     let mut in_debug_mode = false;
     let mut last_button_state_transmission_time: u64 = 0;
 
+        // Potentiometer Setup
+        let mut adc = hal::Adc::new(pac.ADC, &mut pac.RESETS);
+        // Configure GPIO26 as an ADC input
+        let mut adc_pin_0 = hal::adc::AdcPin::new(pins.gpio26).unwrap();
+
     loop {
         let current_time = timer.get_counter().ticks();
 
@@ -139,6 +149,10 @@ fn main() -> ! {
                 .expect("GPIOs should never fail to change stated");
             last_led_transition_time = timer.get_counter().ticks();
         }
+        
+        // Read potentiometer value and scale to 0.0 - 1.0
+        // let raw_pot_value = adc.read(&mut potentiometer).unwrap_or(0);
+        // let scaled_pot_value = (raw_pot_value as f32) / 4095.0;
 
         // Debug print the current state, along with the RSG LED States
         if in_debug_mode {
@@ -246,31 +260,58 @@ fn main() -> ! {
                 if current_time - last_button_state_transmission_time > SERIAL_TX_PERIOD {
                     last_button_state_transmission_time = current_time;
                     let mut button_text: String<20> = String::new();
-                    let button_data = (ne_button
+                    let button_data = (north_button
+                    .is_high()
+                    .expect("GPIOs should never fail to read state")
+                    as u8)
+                    + ((northwest_button
                         .is_high()
                         .expect("GPIOs should never fail to read state")
                         as u8)
-                        + ((se_button
-                            .is_high()
-                            .expect("GPIOs should never fail to read state")
-                            as u8)
-                            << 1)
-                        + ((sw_button
-                            .is_high()
-                            .expect("GPIOs should never fail to read state")
-                            as u8)
-                            << 2)
-                        + ((nw_button
-                            .is_high()
-                            .expect("GPIOs should never fail to read state")
-                            as u8)
-                            << 3);
+                        << 1)
+                    + ((west_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 2)
+                    + ((southwest_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 3)
+                    + ((south_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 4)
+                    + ((southeast_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 5)
+                    + ((east_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 6)
+                    + ((northeast_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 7);
+
+writeln!(button_text, "{button_data}")
+    .expect("GPIOs should never fail to read state");
+
                     writeln!(button_text, "{button_data}")
                         .expect("GPIOs should never fail to read state");
 
                     // Only possible error is when USB Buffer is full, which just means
                     // that this specific message will be dropped.
                     let _ = serial.write(button_text.as_bytes());
+                    let pin_adc_counts: u16 = adc.read(&mut adc_pin_0).unwrap();
+                    let adc_bytes = pin_adc_counts.to_be_bytes();
+                    let _ = serial.write(&adc_bytes);
                     let _ = serial.flush();
                 }
             }
