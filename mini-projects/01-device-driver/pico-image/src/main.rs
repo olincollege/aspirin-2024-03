@@ -14,14 +14,13 @@ use panic_halt as _;
 // register access
 use rp_pico::hal::pac;
 
-// A shorter alias for the Hardware Abstraction Layer, which provides
+// A shorter alias for the Hardware A bstraction Layer, which provides
 // higher-level drivers.
-use embedded_hal::digital::v2::{InputPin, OutputPin, PinState};
+use embedded_hal::digital::{InputPin, OutputPin, PinState};
 use rp_pico::hal;
 use rp_pico::hal::Sio;
-use rp_pico::hal::Adc;
 use rp_pico::Pins;
-use embedded_hal::adc::OneShot;
+use embedded_hal_0_2::adc::OneShot;
 
 // USB Device support
 use usb_device::{class_prelude::*, prelude::*};
@@ -54,9 +53,6 @@ fn main() -> ! {
     // Grab our singleton objects
     let mut pac = pac::Peripherals::take().expect("Peripherals should be accessible on entry");
 
-    // Initialize the watchdog
-    let mut watchdog = hal::watchdog::Watchdog::new(pac.WATCHDOG);
-
     // Initialize LED Pins
     let sio = Sio::new(pac.SIO);
     let pins = Pins::new(
@@ -73,23 +69,21 @@ fn main() -> ! {
     let mut green_led = pins.gpio16.into_push_pull_output();
 
     // Buttons
-    let north_button = pins.gpio28.into_pull_down_input();
-    let northwest_button = pins.gpio27.into_pull_down_input();
-    let west_button = pins.gpio15.into_pull_down_input();
-    let southwest_button = pins.gpio22.into_pull_down_input();
-    let south_button = pins.gpio21.into_pull_down_input();
-    let southeast_button = pins.gpio20.into_pull_down_input();
-    let east_button = pins.gpio19.into_pull_down_input();
-    let northeast_button = pins.gpio14.into_pull_down_input();
+    let mut north_button = pins.gpio28.into_pull_down_input();
+    let mut northwest_button = pins.gpio27.into_pull_down_input();
+    let mut west_button = pins.gpio15.into_pull_down_input();
+    let mut southwest_button = pins.gpio22.into_pull_down_input();
+    let mut south_button = pins.gpio21.into_pull_down_input();
+    let mut southeast_button = pins.gpio20.into_pull_down_input();
+    let mut east_button = pins.gpio19.into_pull_down_input();
+    let mut northeast_button = pins.gpio14.into_pull_down_input();
+    
+    // Set up the watchdog driver - needed by the clock setup code
+    let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
 
-    // Potentiometer
-
-    let mut adc = Adc::new(pac.ADC, &mut pac.RESETS);
-    // let mut potentiometer = pins.gpio26.into_floating_input();
-    let mut potentiometer = hal::adc::AdcPin::new(pins.gpio26).unwrap();
-    // let mut adc_pin = hal::adc::AdcPin::new(potentiometer);
-
-    // Clocks and timer
+    // Configure the clocks
+    //
+    // The default is to generate a 125 MHz system clock
     let clocks = hal::clocks::init_clocks_and_plls(
         rp_pico::XOSC_CRYSTAL_FREQ,
         pac.XOSC,
@@ -136,6 +130,11 @@ fn main() -> ! {
     let mut in_debug_mode = false;
     let mut last_button_state_transmission_time: u64 = 0;
 
+        // Potentiometer Setup
+        let mut adc = hal::Adc::new(pac.ADC, &mut pac.RESETS);
+        // Configure GPIO26 as an ADC input
+        let mut adc_pin_0 = hal::adc::AdcPin::new(pins.gpio26).unwrap();
+
     loop {
         let current_time = timer.get_counter().ticks();
 
@@ -150,90 +149,91 @@ fn main() -> ! {
                 .expect("GPIOs should never fail to change stated");
             last_led_transition_time = timer.get_counter().ticks();
         }
-
-
+        
         // Read potentiometer value and scale to 0.0 - 1.0
-        let raw_pot_value = adc.read(&mut potentiometer).unwrap_or(0);
-        let scaled_pot_value = (raw_pot_value as f32) / 4095.0;
+        // let raw_pot_value = adc.read(&mut potentiometer).unwrap_or(0);
+        // let scaled_pot_value = (raw_pot_value as f32) / 4095.0;
 
-        // Read button states
-        let button_data = (north_button.is_high().unwrap_or(false) as u8)
-            + ((northwest_button.is_high().unwrap_or(false) as u8) << 1)
-            + ((west_button.is_high().unwrap_or(false) as u8) << 2)
-            + ((southwest_button.is_high().unwrap_or(false) as u8) << 3)
-            + ((south_button.is_high().unwrap_or(false) as u8) << 4)
-            + ((southeast_button.is_high().unwrap_or(false) as u8) << 5)
-            + ((east_button.is_high().unwrap_or(false) as u8) << 6)
-            + ((northeast_button.is_high().unwrap_or(false) as u8) << 7);
-
-        // Debug mode output
+        // Debug print the current state, along with the RSG LED States
         if in_debug_mode {
-            let mut debug_text: String<128> = String::new();
+            let mut debug_text: String<60> = String::new();
             writeln!(
                 debug_text,
-                "Buttons: N:{}, NW:{}, W:{}, SW:{}, S:{}, SE:{}, E:{}, NE:{}, Pot:{:.2}",
-                (button_data & 0b0000_0001) > 0,
-                (button_data & 0b0000_0010) > 0,
-                (button_data & 0b0000_0100) > 0,
-                (button_data & 0b0000_1000) > 0,
-                (button_data & 0b0001_0000) > 0,
-                (button_data & 0b0010_0000) > 0,
-                (button_data & 0b0100_0000) > 0,
-                (button_data & 0b1000_0000) > 0,
-                scaled_pot_value
+                "st: {}, r: {}, s: {}, g: {}",
+                device_state as u32,
+                (rsg_led_states.0 == PinState::High) as u8,
+                (rsg_led_states.1 == PinState::High) as u8,
+                (rsg_led_states.2 == PinState::High) as u8
             )
-            .unwrap();
+            .expect("String buffer has been conservatively allocated to fit full payload");
+
+            // Only possible error is when USB Buffer is full, which just means
+            // that this specific message will be dropped.
             let _ = serial.write(debug_text.as_bytes());
         }
 
-        // USB polling for serial commands
+        // Check for new data
         if usb_dev.poll(&mut [&mut serial]) {
             let mut buf = [0u8; 64];
-            if let Ok(count) = serial.read(&mut buf) {
-                if let Ok(command) = core::str::from_utf8(&buf[..count]) {
-                    if command.contains("enable debug") {
+            match serial.read(&mut buf) {
+                Err(_e) => {
+                    // Do nothing
+                }
+                Ok(0) => {
+                    // Do nothing
+                }
+                Ok(count) => {
+                    let serial_cmd = match core::str::from_utf8(&buf[..count]) {
+                        Ok(s) => s.trim(), // If valid UTF-8, convert to String
+                        Err(_) => {
+                            "" // Returning an empty string for invalid UTF-8
+                        }
+                    };
+
+                    if serial_cmd.contains("enable debug") {
                         in_debug_mode = true;
-                    } else if command.contains("disable debug") {
+                    }
+                    if serial_cmd.contains("disable debug") {
                         in_debug_mode = false;
                     }
 
                     // State Machine Updates only based on Serial Input
                     match device_state {
                         DeviceState::PendingInit => {
-                            if command.contains("init controller") {
+                            if serial_cmd.contains("init controller") {
                                 device_state = DeviceState::PendingStart;
                             }
                         }
                         DeviceState::PendingStart => {
-                            if command.contains("set ready led") {
+                            if serial_cmd.contains("set ready led") {
                                 rsg_led_states = (PinState::High, PinState::Low, PinState::Low);
-                            } else if command.contains("set set led") {
+                            } else if serial_cmd.contains("set set led") {
                                 rsg_led_states = (PinState::Low, PinState::High, PinState::Low);
-                            } else if command.contains("set go led") {
+                            } else if serial_cmd.contains("set go led") {
                                 rsg_led_states = (PinState::Low, PinState::Low, PinState::High);
-                            } else if command.contains("set all leds") {
+                            } else if serial_cmd.contains("set all leds") {
                                 rsg_led_states = (PinState::High, PinState::High, PinState::High);
-                            } else if command.contains("clear all leds") {
+                            } else if serial_cmd.contains("clear all leds") {
                                 rsg_led_states = (PinState::Low, PinState::Low, PinState::Low);
                             }
 
-                            if command.contains("start controller") {
+                            if serial_cmd.contains("start controller") {
                                 device_state = DeviceState::Running;
                             }
                         }
                         DeviceState::Running => {
-                            if command.contains("stop controller") {
+                            if serial_cmd.contains("stop controller") {
                                 device_state = DeviceState::Complete;
                             }
                         }
                         DeviceState::Complete => {
-                            if command.contains("reset") {
+                            if serial_cmd.contains("reset") {
                                 device_state = DeviceState::PendingInit;
                             }
-                            if command.contains("restart") {
+                            if serial_cmd.contains("restart") {
                                 device_state = DeviceState::PendingStart;
                             }
-                            if command.contains("start controller") {
+                            if serial_cmd.contains("start controller") {
                                 device_state = DeviceState::Running;
                             }
                         }
@@ -241,7 +241,7 @@ fn main() -> ! {
                 }
             }
         }
-
+        
         // Actions based on the current state
         match device_state {
             DeviceState::PendingInit => {}
@@ -259,48 +259,59 @@ fn main() -> ! {
             DeviceState::Running => {
                 if current_time - last_button_state_transmission_time > SERIAL_TX_PERIOD {
                     last_button_state_transmission_time = current_time;
+                    let mut button_text: String<20> = String::new();
                     let button_data = (north_button
+                    .is_high()
+                    .expect("GPIOs should never fail to read state")
+                    as u8)
+                    + ((northwest_button
                         .is_high()
                         .expect("GPIOs should never fail to read state")
                         as u8)
-                        + ((northwest_button
-                            .is_high()
-                            .expect("GPIOs should never fail to read state")
-                            as u8)
-                            << 1)
-                        + ((west_button
-                            .is_high()
-                            .expect("GPIOs should never fail to read state")
-                            as u8)
-                            << 2)
-                        + ((southwest_button
-                            .is_high()
-                            .expect("GPIOs should never fail to read state")
-                            as u8)
-                            << 3)
-                        + ((south_button
-                            .is_high()
-                            .expect("GPIOs should never fail to read state")
-                            as u8)
-                            << 4)
-                        + ((southeast_button
-                            .is_high()
-                            .expect("GPIOs should never fail to read state")
-                            as u8)
-                            << 5)
-                        + ((east_button
-                            .is_high()
-                            .expect("GPIOs should never fail to read state")
-                            as u8)
-                            << 6)
-                        + ((northeast_button
-                            .is_high()
-                            .expect("GPIOs should never fail to read state")
-                            as u8)
-                            << 7);
+                        << 1)
+                    + ((west_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 2)
+                    + ((southwest_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 3)
+                    + ((south_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 4)
+                    + ((southeast_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 5)
+                    + ((east_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 6)
+                    + ((northeast_button
+                        .is_high()
+                        .expect("GPIOs should never fail to read state")
+                        as u8)
+                        << 7);
+
+writeln!(button_text, "{button_data}")
+    .expect("GPIOs should never fail to read state");
+
+                    writeln!(button_text, "{button_data}")
+                        .expect("GPIOs should never fail to read state");
+
                     // Only possible error is when USB Buffer is full, which just means
                     // that this specific message will be dropped.
-                    let _ = serial.write(&[button_data]);
+                    let _ = serial.write(button_text.as_bytes());
+                    let pin_adc_counts: u16 = adc.read(&mut adc_pin_0).unwrap();
+                    let adc_bytes = pin_adc_counts.to_be_bytes();
+                    let _ = serial.write(&adc_bytes);
                     let _ = serial.flush();
                 }
             }
