@@ -1,6 +1,8 @@
 use crossbeam::channel::{Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use crate::circle_state::CircleState;
 
-pub fn view(receiver: Receiver<(String, String)>, model_sender: Sender<(String, String)>) {
+pub fn view(receiver: Receiver<(String, String)>, model_sender: Sender<(String, String)>, circle_state: Arc<Mutex<CircleState>>) {
     loop {
         if let Ok((_, message)) = receiver.recv() {
             if message == "Escape" {
@@ -35,16 +37,23 @@ pub fn view(receiver: Receiver<(String, String)>, model_sender: Sender<(String, 
                     })
                     .collect();
                 // Print positions
-                for (i, pos) in positions.iter().enumerate() {
-                    print!(
-                        "Player {} Position: ({}, {}){}",
-                        i,
-                        pos[0],
-                        pos[1],
-                        if i < positions.len() - 1 { "   " } else { "\n" }
-                    );
+                if !positions.is_empty() {
+                    for (i, pos) in positions.iter().enumerate() {
+                        print!(
+                            "Player {} Position: ({}, {}){}",
+                            i,
+                            pos[0],
+                            pos[1],
+                            if i < positions.len() - 1 { "   " } else { "\n" }
+                        );
+                    }
                 }
             }
+
+            // Display circle state
+            let circle = circle_state.lock().unwrap();
+            println!("Circle Position: ({}, {}), Radius: {}", circle.x, circle.y, circle.radius);
+
             std::thread::sleep(std::time::Duration::from_millis(1000));
         }
     }

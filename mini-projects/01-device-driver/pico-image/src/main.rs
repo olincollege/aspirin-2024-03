@@ -69,8 +69,8 @@ fn main() -> ! {
     let mut green_led = pins.gpio16.into_push_pull_output();
 
     // Buttons
-    let mut north_button = pins.gpio28.into_pull_down_input();
-    let mut northwest_button = pins.gpio27.into_pull_down_input();
+    let mut north_button = pins.gpio13.into_pull_down_input();
+    let mut northwest_button = pins.gpio12.into_pull_down_input();
     let mut west_button = pins.gpio15.into_pull_down_input();
     let mut southwest_button = pins.gpio22.into_pull_down_input();
     let mut south_button = pins.gpio21.into_pull_down_input();

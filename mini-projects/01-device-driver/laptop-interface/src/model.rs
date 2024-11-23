@@ -1,6 +1,8 @@
 use crate::command::Command;
+use crate::circle_state::CircleState;
 use crossbeam::channel::{Receiver, Sender};
 use device_query::{DeviceQuery, DeviceState, Keycode};
+use std::sync::{Arc, Mutex};
 
 fn send_commands(
     controller_sender: Sender<(String, String)>,
@@ -41,6 +43,7 @@ fn send_commands(
 
 fn update_positions(
     positions: &mut Vec<[i32; 2]>,
+    circle_state: Arc<Mutex<CircleState>>,
     receiver: Receiver<(String, String)>,
     view_sender: Sender<(String, String)>,
 ) {
@@ -52,21 +55,39 @@ fn update_positions(
                     .unwrap();
             } else {
                 let player = sender.parse::<usize>().unwrap();
+                if message.contains("n") {
+                    positions[player][1] += 1;
+                }
                 if message.contains("nw") {
                     positions[player][0] -= 1;
                     positions[player][1] += 1;
                 }
+                if message.contains("w") {
+                    positions[player][0] -= 1;
+                }
                 if message.contains("sw") {
                     positions[player][0] -= 1;
+                    positions[player][1] -= 1;
+                }
+                if message.contains("s") {
                     positions[player][1] -= 1;
                 }
                 if message.contains("se") {
                     positions[player][0] += 1;
                     positions[player][1] -= 1;
                 }
+                if message.contains("e") {
+                    positions[player][0] += 1;
+                }
                 if message.contains("ne") {
                     positions[player][0] += 1;
                     positions[player][1] += 1;
+                }
+                if message.starts_with("adc:") {
+                    let adc_value: u16 = message[4..].parse().unwrap();
+                    let mut circle = circle_state.lock().unwrap();
+                    circle.update(positions[player][0] as u8, adc_value);
+                    println!("Player {} ADC Value: {}", player, adc_value);
                 }
             }
         }
@@ -93,6 +114,7 @@ pub fn model(
     controller_sender: Sender<(String, String)>,
     view_sender: Sender<(String, String)>,
     num_players: usize,
+    circle_state: Arc<Mutex<CircleState>>,
 ) {
     // Wait for all controllers to connect
     let mut ready = vec![false; num_players];
@@ -156,7 +178,7 @@ pub fn model(
                 break;
             }
             // Receive controller messages and send to view
-            update_positions(&mut positions, receiver.clone(), view_sender.clone());
+            update_positions(&mut positions, circle_state.clone(), receiver.clone(), view_sender.clone());
 
             // Small delay to prevent excessive CPU usage
             std::thread::sleep(std::time::Duration::from_millis(10));

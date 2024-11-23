@@ -1,4 +1,4 @@
-use std::{ffi::CString, ptr};
+use std::{ffi::CString, ptr, time::Instant};
 
 use crossbeam::channel::{Receiver, Sender};
 use libc::{c_char, c_int, c_void};
@@ -12,16 +12,13 @@ extern "C" {
     fn sp_close(port: *mut c_void) -> c_int;
     fn sp_free_port(port: *mut c_void);
     fn sp_blocking_read(port: *mut c_void, buf: *mut u8, count: usize, timeout_ms: u32) -> c_int;
-    fn sp_blocking_write(port: *mut c_void, buf: *const u8, count: usize, timeout_ms: u32)
-        -> c_int;
+    fn sp_blocking_write(port: *mut c_void, buf: *const u8, count: usize, timeout_ms: u32) -> c_int;
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
-struct ButtonStates {
-    northwest: bool,
-    southwest: bool,
-    southeast: bool,
-    northeast: bool,
+#[derive(Debug, Clone, Copy)]
+struct ControllerState {
+    buttons: u8,
+    adc_value: u16,
 }
 
 fn open_port(port_name: &str) -> Result<*mut c_void, String> {
@@ -54,22 +51,23 @@ fn send_command(port: *mut c_void, command: Command) -> Result<(), String> {
     Ok(())
 }
 
-fn read_button_states(port: *mut c_void) -> Result<ButtonStates, String> {
-    let mut buf = [0u8; 1];
+fn read_controller_state(port: *mut c_void) -> Result<ControllerState, String> {
+    let mut buffer = [0u8; 3];
     unsafe {
-        let bytes_read = sp_blocking_read(port, buf.as_mut_ptr(), buf.len(), 1000);
-        if bytes_read != buf.len() as i32 {
+        let bytes_read = sp_blocking_read(port, buffer.as_mut_ptr(), buffer.len(), 1000);
+        if bytes_read != buffer.len() as i32 {
             return Err(format!(
-                "{:?} failed to read button states: {}",
+                "{:?} failed to read controller state: {}",
                 port, bytes_read
             ));
         }
     }
-    Ok(ButtonStates {
-        northwest: (buf[0] & 0b1000) != 0,
-        southwest: (buf[0] & 0b0100) != 0,
-        southeast: (buf[0] & 0b0010) != 0,
-        northeast: (buf[0] & 0b0001) != 0,
+    let adc_value = u16::from_be_bytes([buffer[1], buffer[2]]);
+    let buttons = buffer[0];
+    // println!("Read buttons: {:08b}, ADC value: {}", buttons, adc_value); // Debug print
+    Ok(ControllerState {
+        buttons,
+        adc_value,
     })
 }
 
@@ -89,6 +87,10 @@ pub fn controller(
     model_sender
         .send((player.to_string(), "".to_string()))
         .unwrap();
+
+    let mut last_button_state = 0;
+    let mut last_debounce_time = Instant::now();
+    let debounce_delay = std::time::Duration::from_millis(50);
 
     loop {
         // Wait for game to start
@@ -110,8 +112,7 @@ pub fn controller(
             }
         }
 
-        // Read button states
-        let mut previous_states = ButtonStates::default();
+        // Read controller state
         loop {
             match receiver.try_recv() {
                 Ok((_, message)) => {
@@ -121,30 +122,47 @@ pub fn controller(
                 }
                 Err(_) => {}
             }
-            let current_states = match read_button_states(port) {
-                Ok(states) => states,
+            let controller_state = match read_controller_state(port) {
+                Ok(state) => state,
                 Err(e) => {
                     eprintln!("{}", e);
                     break;
                 }
             };
-            let buttons = [
-                ("nw", current_states.northwest, previous_states.northwest),
-                ("sw", current_states.southwest, previous_states.southwest),
-                ("se", current_states.southeast, previous_states.southeast),
-                ("ne", current_states.northeast, previous_states.northeast),
-            ];
-            let message = buttons
-                .iter()
-                .filter(|(_, current, previous)| current != previous && !current)
-                .map(|(name, _, _)| name)
-                .fold(String::new(), |acc, name| format!("{}{},", acc, name));
 
-            // Update previous states
-            previous_states = current_states;
+            // Debounce button state
+            if controller_state.buttons != last_button_state {
+                last_debounce_time = Instant::now();
+            }
 
-            if message.len() > 0 {
-                model_sender.send((player.to_string(), message)).unwrap();
+            if Instant::now().duration_since(last_debounce_time) > debounce_delay {
+                last_button_state = controller_state.buttons;
+
+                // Send button states
+                let buttons = [
+                    ("n", controller_state.buttons & 0b10000000 != 0),
+                    ("nw", controller_state.buttons & 0b01000000 != 0),
+                    ("w", controller_state.buttons & 0b00100000 != 0),
+                    ("sw", controller_state.buttons & 0b00010000 != 0),
+                    ("s", controller_state.buttons & 0b00001000 != 0),
+                    ("se", controller_state.buttons & 0b00000100 != 0),
+                    ("e", controller_state.buttons & 0b00000010 != 0),
+                    ("ne", controller_state.buttons & 0b00000001 != 0),
+                ];
+                let message = buttons
+                    .iter()
+                    .filter(|(_, pressed)| *pressed)
+                    .map(|(name, _)| *name)
+                    .fold(String::new(), |acc, name| format!("{}{},", acc, name));
+
+                if !message.is_empty() {
+                    model_sender.send((player.to_string(), message)).unwrap();
+                }
+
+                // Send ADC value
+                model_sender
+                    .send((player.to_string(), format!("adc:{}", controller_state.adc_value)))
+                    .unwrap();
             }
         }
     }
